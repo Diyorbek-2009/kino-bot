@@ -45,13 +45,11 @@ def main_menu():
 
 def back_button():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Bosh sahifaga", callback_data="back")]
+        [InlineKeyboardButton(text="🏠 Bosh sahifaga", callback_data="back")]
     ])
     return keyboard
 
-# === START ===
-@dp.message(Command("start"))
-async def start(message: types.Message):
+async def show_main_menu(message: types.Message):
     await message.answer(
         "🎬 <b>KinoMax</b> — eng zo'r kino botiga xush kelibsiz!\n\n"
         "🍿 Bizda nima bor:\n"
@@ -64,20 +62,35 @@ async def start(message: types.Message):
         reply_markup=main_menu()
     )
 
-# === HELP ===
-@dp.message(Command("help"))
-async def help_cmd(message: types.Message):
+async def show_help(message: types.Message):
     await message.answer(
-        "📌 <b>Yordam</b>\n\n"
-        "🔍 Kino topish uchun:\n"
-        "Kino kodini yuboring\n"
-        "Masalan: <code>110</code>\n\n"
-        "📋 Buyruqlar:\n"
-        "/start - Bosh sahifa\n"
-        "/help - Yordam",
+        "📌 <b>KinoMax — Yordam markazi</b>\n\n"
+        "🎬 <b>Kino topish:</b>\n"
+        "Kino kodini yuboring → film keladi!\n"
+        "Masalan: <code>20</code>\n\n"
+        "📋 <b>Buyruqlar:</b>\n"
+        "#start — Bosh sahifa\n"
+        "#help — Yordam\n\n"
+        "🎭 <b>Janrlar:</b>\n"
+        "🎬 Kinolar\n"
+        "📺 Seriallar\n"
+        "🎠 Multfilmlar\n\n"
+        "📞 <b>Muammo yoki taklif:</b>\n"
+        "Admin → @Ergashevch_777\n\n"
+        "⭐ Botni do'stlaringizga yuboring!",
         parse_mode="HTML",
         reply_markup=back_button()
     )
+
+# === START ===
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    await show_main_menu(message)
+
+# === HELP ===
+@dp.message(Command("help"))
+async def help_cmd(message: types.Message):
+    await show_help(message)
 
 # === STATISTIKA (ADMIN) ===
 @dp.message(Command("stat"))
@@ -131,15 +144,26 @@ async def receive_video(message: types.Message):
         parse_mode="HTML"
     )
 
-# === KINO QIDIRISH ===
+# === BARCHA MATNLI XABARLAR ===
 @dp.message(F.text)
 async def find_movie(message: types.Message):
     code = message.text.strip()
 
-    # Barcha buyruqlarni o'tkazib yuborish
+    # #start yoki start bosilsa — bosh sahifa
+    if code.lower() in ["#start", "start", "bosh sahifa", "#bosh", "menu", "#menu"]:
+        await show_main_menu(message)
+        return
+
+    # #help bosilsa — yordam
+    if code.lower() in ["#help", "help", "yordam", "#yordam"]:
+        await show_help(message)
+        return
+
+    # Buyruqlarni o'tkazib yuborish
     if code.startswith("/") or code.startswith("#"):
         return
 
+    # Kino qidirish
     if code in movies:
         await message.answer("⏳ Kino yuklanmoqda...")
         await bot.copy_message(
@@ -186,7 +210,13 @@ async def contact_callback(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "back")
 async def back_callback(callback: types.CallbackQuery):
     await callback.message.answer(
-        "🏠 <b>Bosh sahifa</b>",
+        "🎬 <b>KinoMax</b> — eng zo'r kino botiga xush kelibsiz!\n\n"
+        "🍿 Bizda nima bor:\n"
+        "✅ Eng yangi kinolar\n"
+        "✅ Seriallar\n"
+        "✅ Multfilmlar\n"
+        "✅ 720p va 1080p sifat\n\n"
+        "👇 Quyidagi tugmalardan foydalaning:",
         parse_mode="HTML",
         reply_markup=main_menu()
     )
@@ -230,7 +260,7 @@ async def new_callback(callback: types.CallbackQuery):
 async def main():
     print("✅ KinoMax bot ishga tushdi!")
     print(f"🎬 Kinolar bazasida: {len(movies)} ta kino")
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
     asyncio.run(main())
