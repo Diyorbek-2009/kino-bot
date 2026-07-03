@@ -178,7 +178,7 @@ async def receive_photo(message: types.Message):
 
     caption = message.caption
     if not caption:
-        await message.answer("⚠️ Caption ga matn va KOD:raqam yozing!")
+        await message.answer("⚠️ Caption ga matn va Kino Kodi:raqam yozing!")
         return
 
     # KOD:1 ni topish
