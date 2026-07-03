@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -28,7 +29,6 @@ bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# === OBUNA TEKSHIRISH ===
 async def check_subscription(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(REQUIRED_CHANNEL, user_id)
@@ -38,7 +38,7 @@ async def check_subscription(user_id: int) -> bool:
 
 def subscribe_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=f"https://t.me/kino_max_77")],
+        [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url="https://t.me/kino_max_77")],
         [InlineKeyboardButton(text="✅ Obuna bo'ldim", callback_data="check_sub")]
     ])
 
@@ -86,7 +86,7 @@ async def show_help(message: types.Message):
         "📌 <b>KinoMax — Yordam markazi</b>\n\n"
         "🎬 <b>Kino topish:</b>\n"
         "Kino kodini yuboring → film keladi!\n"
-        "Masalan: <code>20</code>\n\n"
+        "Masalan: <code>1</code>\n\n"
         "📋 <b>Buyruqlar:</b>\n"
         "#start — Bosh sahifa\n"
         "#help — Yordam\n\n"
@@ -101,7 +101,6 @@ async def show_help(message: types.Message):
         reply_markup=back_button()
     )
 
-# === START ===
 @dp.message(Command("start"))
 async def start(message: types.Message):
     subscribed = await check_subscription(message.from_user.id)
@@ -115,25 +114,19 @@ async def start(message: types.Message):
         return
     await show_main_menu(message)
 
-# === OBUNA TEKSHIRISH CALLBACK ===
 @dp.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: types.CallbackQuery):
     subscribed = await check_subscription(callback.from_user.id)
     if subscribed:
-        await callback.message.answer(
-            "✅ <b>Rahmat! Obuna bo'ldingiz!</b>",
-            parse_mode="HTML"
-        )
+        await callback.message.answer("✅ <b>Rahmat! Obuna bo'ldingiz!</b>", parse_mode="HTML")
         await show_main_menu(callback.message)
     else:
         await callback.answer("❌ Siz hali obuna bo'lmadingiz!", show_alert=True)
 
-# === HELP ===
 @dp.message(Command("help"))
 async def help_cmd(message: types.Message):
     await show_help(message)
 
-# === STATISTIKA (ADMIN) ===
 @dp.message(Command("stat"))
 async def stat(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -144,7 +137,22 @@ async def stat(message: types.Message):
         parse_mode="HTML"
     )
 
-# === ADMIN: KINO QO'SHISH ===
+@dp.message(Command("delete"))
+async def delete_movie(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("⚠️ Format: <code>/delete KOD</code>", parse_mode="HTML")
+        return
+    code = args[1]
+    if code in movies:
+        del movies[code]
+        save_movies(movies)
+        await message.answer(f"✅ <b>{code}</b> kodli kino o'chirildi!", parse_mode="HTML")
+    else:
+        await message.answer(f"❌ <b>{code}</b> kodli kino topilmadi!", parse_mode="HTML")
+
 @dp.message(Command("add"))
 async def add_movie(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -152,37 +160,36 @@ async def add_movie(message: types.Message):
         return
     await message.answer(
         "📥 <b>Kino qo'shish tartibi:</b>\n\n"
-        "1. Avval <b>rasm</b> yuboring\n"
-        "Caption formatda:\n"
-        "<code>KOD|Kino nomi|Yil|IMDb|Janr</code>\n\n"
+        "1. <b>Rasm</b> yuboring\n"
+        "Caption oxirida <b>KOD:1</b> yozing\n\n"
         "Masalan:\n"
-        "<code>1|Detektiv qo'ylar|2026|7.5|Komediya</code>\n\n"
-        "2. Keyin <b>video</b> yuboring, caption ga faqat kod:\n"
+        "<code>🎬 Nomi: Avatar\n"
+        "📅 Yil: 2025\n"
+        "KOD:1</code>\n\n"
+        "2. <b>Video</b> yuboring, caption ga faqat:\n"
         "<code>1</code>",
         parse_mode="HTML"
     )
 
-# === RASM QABUL QILISH (ADMIN) ===
 @dp.message(F.photo)
 async def receive_photo(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         return
 
     caption = message.caption
-    if not caption or "|" not in caption:
-        await message.answer("⚠️ Format: <code>KOD|Nomi|Yil|IMDb|Janr</code>", parse_mode="HTML")
+    if not caption:
+        await message.answer("⚠️ Caption ga matn va KOD:raqam yozing!")
         return
 
-    parts = caption.split("|")
-    if len(parts) < 5:
-        await message.answer("⚠️ Barcha ma'lumotlarni kiriting!", parse_mode="HTML")
+    # KOD:1 ni topish
+    match = re.search(r'KOD:(\w+)', caption, re.IGNORECASE)
+    if not match:
+        await message.answer("⚠️ Caption oxirida <code>KOD:1</code> yozing!", parse_mode="HTML")
         return
 
-    code = parts[0].strip()
-    name = parts[1].strip()
-    year = parts[2].strip()
-    imdb = parts[3].strip()
-    genre = parts[4].strip()
+    code = match.group(1)
+    # Kodni captiondan olib tashlash
+    clean_caption = re.sub(r'KOD:\w+', '', caption, flags=re.IGNORECASE).strip()
 
     photo_id = message.photo[-1].file_id
 
@@ -190,21 +197,16 @@ async def receive_photo(message: types.Message):
         movies[code] = {}
 
     movies[code]["photo"] = photo_id
-    movies[code]["name"] = name
-    movies[code]["year"] = year
-    movies[code]["imdb"] = imdb
-    movies[code]["genre"] = genre
+    movies[code]["caption"] = clean_caption
     save_movies(movies)
 
     await message.answer(
-        f"✅ Kino ma'lumoti saqlandi!\n"
-        f"📌 Kod: <code>{code}</code>\n"
-        f"🎬 Nomi: {name}\n\n"
+        f"✅ Rasm va matn saqlandi!\n"
+        f"📌 Kod: <code>{code}</code>\n\n"
         f"Endi videoni yuboring, caption ga: <code>{code}</code>",
         parse_mode="HTML"
     )
 
-# === VIDEO QABUL QILISH (ADMIN) ===
 @dp.message(F.video)
 async def receive_video(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -236,7 +238,6 @@ async def receive_video(message: types.Message):
         parse_mode="HTML"
     )
 
-# === KINO QIDIRISH ===
 @dp.message(F.text)
 async def find_movie(message: types.Message):
     code = message.text.strip()
@@ -244,10 +245,7 @@ async def find_movie(message: types.Message):
     if code.lower() in ["#start", "start", "bosh sahifa", "#bosh", "menu", "#menu"]:
         subscribed = await check_subscription(message.from_user.id)
         if not subscribed:
-            await message.answer(
-                "📢 Botdan foydalanish uchun kanalga obuna bo'ling!",
-                reply_markup=subscribe_keyboard()
-            )
+            await message.answer("📢 Botdan foydalanish uchun kanalga obuna bo'ling!", reply_markup=subscribe_keyboard())
             return
         await show_main_menu(message)
         return
@@ -259,40 +257,26 @@ async def find_movie(message: types.Message):
     if code.startswith("/") or code.startswith("#"):
         return
 
-    # Obuna tekshirish
     subscribed = await check_subscription(message.from_user.id)
     if not subscribed:
-        await message.answer(
-            "📢 Botdan foydalanish uchun kanalga obuna bo'ling!",
-            reply_markup=subscribe_keyboard()
-        )
+        await message.answer("📢 Botdan foydalanish uchun kanalga obuna bo'ling!", reply_markup=subscribe_keyboard())
         return
 
     if code in movies:
         movie = movies[code]
-        name = movie.get("name", "Noma'lum")
-        year = movie.get("year", "")
-        imdb = movie.get("imdb", "")
-        genre = movie.get("genre", "")
+        caption = movie.get("caption", "🎬 Kino")
         photo = movie.get("photo")
 
-        caption = (
-            f"🎬 <b>{name}</b>\n\n"
-            f"📅 Yili: {year}\n"
-            f"⭐ IMDb: {imdb}/10\n"
-            f"🎭 Janr: {genre}\n\n"
-            f"👇 Tomosha qilish uchun tugmani bosing:"
-        )
+        full_caption = caption + "\n\n👇 Tomosha qilish uchun tugmani bosing:"
 
         if photo:
             await message.answer_photo(
                 photo=photo,
-                caption=caption,
-                parse_mode="HTML",
+                caption=full_caption,
                 reply_markup=watch_button(code)
             )
         else:
-            await message.answer(caption, parse_mode="HTML", reply_markup=watch_button(code))
+            await message.answer(full_caption, reply_markup=watch_button(code))
     else:
         await message.answer(
             f"❌ <b>{code}</b> kodli kino topilmadi!\n\n"
@@ -301,7 +285,6 @@ async def find_movie(message: types.Message):
             reply_markup=back_button()
         )
 
-# === TOMOSHA QILISH CALLBACK ===
 @dp.callback_query(F.data.startswith("watch_"))
 async def watch_callback(callback: types.CallbackQuery):
     code = callback.data.replace("watch_", "")
@@ -328,7 +311,6 @@ async def watch_callback(callback: types.CallbackQuery):
         await callback.answer("❌ Video hali qo'shilmagan!", show_alert=True)
     await callback.answer()
 
-# === CALLBACK TUGMALAR ===
 @dp.callback_query(F.data == "search")
 async def search_callback(callback: types.CallbackQuery):
     await callback.message.answer(
@@ -394,14 +376,17 @@ async def new_callback(callback: types.CallbackQuery):
     if movies:
         text += f"Hozirda <b>{len(movies)}</b> ta kino mavjud!\n\n"
         for code, info in list(movies.items())[-5:]:
-            name = info.get("name", code) if isinstance(info, dict) else code
-            text += f"🎬 <b>{name}</b> — Kod: <code>{code}</code>\n"
+            if isinstance(info, dict):
+                caption = info.get("caption", "")
+                first_line = caption.split("\n")[0] if caption else code
+            else:
+                first_line = code
+            text += f"🎬 {first_line} — Kod: <code>{code}</code>\n"
     else:
         text += "Hozircha kino qo'shilmagan. Tez kunda qo'shiladi! 🍿"
     await callback.message.answer(text, parse_mode="HTML", reply_markup=back_button())
     await callback.answer()
 
-# === MAIN ===
 async def main():
     print("✅ KinoMax bot ishga tushdi!")
     print(f"🎬 Kinolar bazasida: {len(movies)} ta kino")
