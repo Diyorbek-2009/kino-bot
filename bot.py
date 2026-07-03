@@ -29,6 +29,19 @@ bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
+def extract_code(caption):
+    # KOD:1 yoki Kino kodi : 1 yoki Kino Kodi :1 kabi variantlarni topadi
+    pattern = r'(?:KOD|Kino\s*[Kk]odi)\s*:\s*(\w+)'
+    match = re.search(pattern, caption, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+def remove_code_line(caption):
+    # Kod qatorini o'chirish
+    pattern = r'\n?.*(?:KOD|Kino\s*[Kk]odi)\s*:\s*\w+.*'
+    return re.sub(pattern, '', caption, flags=re.IGNORECASE).strip()
+
 async def check_subscription(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(REQUIRED_CHANNEL, user_id)
@@ -161,11 +174,12 @@ async def add_movie(message: types.Message):
     await message.answer(
         "📥 <b>Kino qo'shish tartibi:</b>\n\n"
         "1. <b>Rasm</b> yuboring\n"
-        "Caption oxirida <b>KOD:1</b> yozing\n\n"
+        "Caption ga xohlagan matn yozing\n"
+        "Oxirida <b>Kino Kodi : 1</b> yozing\n\n"
         "Masalan:\n"
-        "<code>🎬 Nomi: Avatar\n"
+        "<code>🎬 Nomi: Avatar 3\n"
         "📅 Yil: 2025\n"
-        "KOD:1</code>\n\n"
+        "Kino Kodi : 1</code>\n\n"
         "2. <b>Video</b> yuboring, caption ga faqat:\n"
         "<code>1</code>",
         parse_mode="HTML"
@@ -178,19 +192,20 @@ async def receive_photo(message: types.Message):
 
     caption = message.caption
     if not caption:
-        await message.answer("⚠️ Caption ga matn va Kino Kodi:raqam yozing!")
+        await message.answer("⚠️ Caption ga matn va Kino Kodi : 1 yozing!")
         return
 
-    # KOD:1 ni topish
-    match = re.search(r'KOD:(\w+)', caption, re.IGNORECASE)
-    if not match:
-        await message.answer("⚠️ Caption oxirida <code>KOD:1</code> yozing!", parse_mode="HTML")
+    code = extract_code(caption)
+    if not code:
+        await message.answer(
+            "⚠️ Caption da kod topilmadi!\n\n"
+            "Oxirida shunday yozing:\n"
+            "<code>Kino Kodi : 1</code>",
+            parse_mode="HTML"
+        )
         return
 
-    code = match.group(1)
-    # Kodni captiondan olib tashlash
-    clean_caption = re.sub(r'KOD:\w+', '', caption, flags=re.IGNORECASE).strip()
-
+    clean_caption = remove_code_line(caption)
     photo_id = message.photo[-1].file_id
 
     if code not in movies:
@@ -288,12 +303,10 @@ async def find_movie(message: types.Message):
 @dp.callback_query(F.data.startswith("watch_"))
 async def watch_callback(callback: types.CallbackQuery):
     code = callback.data.replace("watch_", "")
-
     subscribed = await check_subscription(callback.from_user.id)
     if not subscribed:
         await callback.answer("❌ Avval kanalga obuna bo'ling!", show_alert=True)
         return
-
     if code in movies and "video" in movies[code]:
         await callback.message.answer("⏳ Kino yuklanmoqda...")
         await bot.copy_message(
@@ -317,8 +330,7 @@ async def search_callback(callback: types.CallbackQuery):
         "🔍 <b>Kino qidirish</b>\n\n"
         "Kino kodini yuboring!\n"
         "Masalan: <code>1</code>",
-        parse_mode="HTML",
-        reply_markup=back_button()
+        parse_mode="HTML", reply_markup=back_button()
     )
     await callback.answer()
 
@@ -328,8 +340,7 @@ async def contact_callback(callback: types.CallbackQuery):
         "📞 <b>Bog'lanish</b>\n\n"
         "👤 Admin: @Ergashevch_777\n"
         "📢 Reklama uchun ham shu manzilga murojaat qiling!",
-        parse_mode="HTML",
-        reply_markup=back_button()
+        parse_mode="HTML", reply_markup=back_button()
     )
     await callback.answer()
 
@@ -343,30 +354,23 @@ async def back_callback(callback: types.CallbackQuery):
         "✅ Multfilmlar\n"
         "✅ 720p va 1080p sifat\n\n"
         "👇 Quyidagi tugmalardan foydalaning:",
-        parse_mode="HTML",
-        reply_markup=main_menu()
+        parse_mode="HTML", reply_markup=main_menu()
     )
     await callback.answer()
 
 @dp.callback_query(F.data == "movies")
 async def movies_callback(callback: types.CallbackQuery):
     await callback.message.answer(
-        "🎬 <b>Kinolar</b>\n\n"
-        "Kino kodini yuboring!\n"
-        "Masalan: <code>1</code>",
-        parse_mode="HTML",
-        reply_markup=back_button()
+        "🎬 <b>Kinolar</b>\n\nKino kodini yuboring!\nMasalan: <code>1</code>",
+        parse_mode="HTML", reply_markup=back_button()
     )
     await callback.answer()
 
 @dp.callback_query(F.data == "serials")
 async def serials_callback(callback: types.CallbackQuery):
     await callback.message.answer(
-        "📺 <b>Seriallar</b>\n\n"
-        "Serial kodini yuboring!\n"
-        "Masalan: <code>1</code>",
-        parse_mode="HTML",
-        reply_markup=back_button()
+        "📺 <b>Seriallar</b>\n\nSerial kodini yuboring!\nMasalan: <code>1</code>",
+        parse_mode="HTML", reply_markup=back_button()
     )
     await callback.answer()
 
